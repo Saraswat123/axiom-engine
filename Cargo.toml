@@ -10,7 +10,7 @@ members = [
     "crates/store",
     "crates/p2p-transport",
     "crates/mcp-server",
-    "guest",
+    "crates/zk-proof/guest",
 ]
 resolver = "2"
 

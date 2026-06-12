@@ -6,6 +6,32 @@
 
 ---
 
+## Problem Statement
+
+AI systems today are black boxes. You ask a question, get an answer, and have no way to verify:
+
+- **Is the computation correct?** A model hallucinating a math result looks identical to a correct one.
+- **Did the computation actually execute as claimed?** No audit trail, no replay, no proof.
+- **Can a third party verify the result without re-running it?** No — every verifier must trust the system.
+- **Is the system protected from adversarial inputs?** Formally, no — current systems have no domain invariants enforced at runtime.
+
+This matters most in high-stakes domains: protocol design, financial computation, cryptographic circuit validation, on-chain settlement, and multi-agent coordination where individual agent trust cannot be assumed.
+
+**axiom-engine** solves this by attaching machine-checkable proof to every computation:
+
+| Problem | axiom-engine Answer |
+|---|---|
+| Answer could be hallucinated | Z3 SMT formal proof — every claim is logically verified |
+| Execution is invisible | RISC Zero ZK receipt — cryptographic proof computation ran correctly |
+| No replay capability | Deterministic trace hash — any node can re-derive the same result |
+| No runtime invariants | Formal invariant registry — Z3 checks domain bounds on every call |
+| No multi-party trust | P2P proof broadcast + AggregatedProof composition (Phase 6) |
+| Confidential but auditable | AWS Nitro TEE attestation anchor (Phase 7) |
+
+The result: a computation engine where **trust is replaced by proof**.
+
+---
+
 ## What This Is
 
 Most AI systems return answers. axiom-engine returns answers + proof.
@@ -221,6 +247,290 @@ CI blocks merge if any critical invariant fails verification.
 | 6 | 🔲 | libp2p P2P proof broadcast |
 | 7 | 🔲 | Post-quantum keys (Kyber/Dilithium) |
 | 8 | 🔲 | AWS Nitro TEE attestation anchor |
+
+---
+
+## Usability Test Cases
+
+Manual test suite — run top to bottom. Each test has input, expected output, and what it verifies.
+
+### Prerequisites
+
+```bash
+# Start engine
+docker compose --profile engine up -d
+# OR local
+AXIOM_TRANSPORT=http PORT=8080 cargo run -p axiom-mcp-server
+```
+
+---
+
+### TC-01 — Engine health check
+
+```bash
+curl -sf http://localhost:8080/health
+```
+
+**Expected:**
+```json
+{"engine":"axiom-engine","status":"ok","version":"0.1.0"}
+```
+**Verifies:** container running, HTTP2 transport alive.
+
+---
+
+### TC-02 — Expression optimization (egg)
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"egg_optimize","input":{"expression":"(+ x 0)"}}'
+```
+
+**Expected:**
+```json
+{"ok":true,"result":{"original":"(+ x 0)","optimized":"x"}}
+```
+**Verifies:** equality saturation reduces `(+ x 0)` to `x`.
+
+---
+
+### TC-03 — Z3 formal proof (passes)
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"z3_prove","input":{"property":"square_positive","low":1,"high":1000}}'
+```
+
+**Expected:**
+```json
+{"ok":true,"result":{"verdict":"proved","detail":"property holds for all values in range"}}
+```
+**Verifies:** Z3 proves x² > 0 for all x in [1,1000].
+
+---
+
+### TC-04 — Z3 formal proof (should prove edge: negative range)
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"z3_prove","input":{"property":"square_positive","low":-100,"high":-1}}'
+```
+
+**Expected:** `"verdict":"proved"` — x² > 0 holds even for negative x.
+**Verifies:** Z3 handles negative domain correctly.
+
+---
+
+### TC-05 — OptVerify pipeline (first call — no cache)
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"opt_verify","input":{"expression":"(* x 1)"}}'
+```
+
+**Expected:**
+```json
+{
+  "ok": true,
+  "result": {
+    "original":"(* x 1)",
+    "optimized":"x",
+    "z3_verdict":"proved",
+    "cache_hit":false
+  }
+}
+```
+**Verifies:** egg + Z3 pipeline runs, result stored.
+
+---
+
+### TC-06 — OptVerify cache hit (repeat call)
+
+Run **TC-05 again** (same expression).
+
+**Expected:** `"cache_hit":true` — result served from sled store, Z3 not re-run.
+**Verifies:** persistent DashMap+sled cache working.
+
+---
+
+### TC-07 — Matrix determinant
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"compute_matrix","input":{"op":"determinant","data":[2,0,0,3]}}'
+```
+
+**Expected:** `{"determinant":6.0}` — det([[2,0],[0,3]]) = 6.
+**Verifies:** nalgebra compute correct.
+
+---
+
+### TC-08 — Matrix BN254 field blob (ZK-aligned)
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"compute_matrix","input":{"op":"field_blob","data":[1,2,3,4]}}'
+```
+
+**Expected:**
+```json
+{"field":"BN254","blob_len":128,"blob_hex":"..."}
+```
+**Verifies:** ark-ff BN254 field encoding produces 32 bytes per element.
+
+---
+
+### TC-09 — Execution trace grows
+
+```bash
+# Step 1: check initial trace length
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"trace_snapshot","input":{}}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('entries:', len(d['result']['entries']))"
+
+# Step 2: run opt_verify
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"opt_verify","input":{"expression":"(+ x 0)"}}' > /dev/null
+
+# Step 3: trace should have grown
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"trace_snapshot","input":{}}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('entries:', len(d['result']['entries']))"
+```
+
+**Expected:** entry count increases by 2 (egg call + z3 call recorded).
+**Verifies:** TraceRecorder captures all tool calls deterministically.
+
+---
+
+### TC-10 — Persistence across container restart
+
+```bash
+# Step 1: populate cache
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"opt_verify","input":{"expression":"(* x 0)"}}' > /dev/null
+
+# Step 2: check count
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"store_stats","input":{}}' | python3 -m json.tool
+
+# Step 3: restart container
+docker restart axiom-engine-axiom-engine-1 && sleep 4
+
+# Step 4: count must be same (sled persistence)
+curl -sf -X POST http://localhost:8080/tools \
+  -d '{"tool":"store_stats","input":{}}' | python3 -m json.tool
+```
+
+**Expected:** `total` same before and after restart, `persistent: true`.
+**Verifies:** sled L2 store survives container restart via Docker volume.
+
+---
+
+### TC-11 — Store stats structure
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"store_stats","input":{}}'
+```
+
+**Expected:**
+```json
+{"ok":true,"result":{"total":N,"persistent":true,"by_kind":{"SmtResult":N}}}
+```
+**Verifies:** store reports persistent=true (sled open), kind breakdown correct.
+
+---
+
+### TC-12 — MCP JSON-RPC protocol
+
+```bash
+curl -sf -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+**Expected:** JSON-RPC 2.0 response with `result.tools` array, 6 tools listed.
+**Verifies:** MCP protocol compliance (Claude Code / Copilot can connect).
+
+---
+
+### TC-13 — Unknown tool returns error
+
+```bash
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"nonexistent","input":{}}'
+```
+
+**Expected:** `{"ok":false,"error":"unknown tool: nonexistent"}` with HTTP 400.
+**Verifies:** error handling, no panic on bad input.
+
+---
+
+### TC-14 — ZK proof dev mode (requires risc0 build)
+
+```bash
+RISC0_DEV_MODE=1 bash scripts/run-zk.sh &
+sleep 10
+curl -sf -X POST http://localhost:8080/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"zk_prove","input":{"op":"sum","data":[1,2,3,4,5]}}'
+```
+
+**Expected:**
+```json
+{
+  "status":"proved",
+  "op":"sum",
+  "result":15.0,
+  "verified":true,
+  "dev_mode":true
+}
+```
+**Verifies:** RISC Zero guest runs, receipt generated, commitment produced.
+
+---
+
+### TC-15 — Dashboard UI loads
+
+```bash
+curl -sf http://localhost:8080/ | grep "AXIOM-ENGINE"
+curl -sf http://localhost:8080/logs | grep "LIVE LOGS"
+```
+
+**Expected:** both return HTML with matching title strings.
+**Verifies:** dashboard + live log viewer routes active.
+
+---
+
+### Unit Test Suite
+
+```bash
+# All unit tests
+cargo test --all
+
+# Expected output:
+# axiom-compute:   test_identity_det ✓  test_field_encoding ✓
+# axiom-egg-tool:  test_simplify_add_zero ✓  test_simplify_mul_one ✓
+# axiom-z3-tool:   test_square_positive ✓
+# axiom-pipeline:  test_opt_verify_add_zero ✓
+```
+
+---
+
+### Integration Test Suite (requires running server)
+
+```bash
+AXIOM_TRANSPORT=http cargo run -p axiom-mcp-server &
+sleep 3
+cargo test --test integration -- --ignored --test-threads=1
+```
 
 ---
 
