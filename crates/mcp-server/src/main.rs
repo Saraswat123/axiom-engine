@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{
     extract::State,
-    http::{StatusCode, header},
+    http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
@@ -93,6 +93,7 @@ async fn run_http(state: AppState) -> Result<()> {
         .route("/mcp", post(mcp_handler))
         .route("/tools", post(tool_call_handler))
         .route("/health", get(health))
+        .route("/logs", get(logs_page))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -124,6 +125,103 @@ async fn tool_call_handler(
 
 async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok", "engine": "axiom-engine", "version": "0.1.0" }))
+}
+
+async fn logs_page() -> impl IntoResponse {
+    Html(r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>axiom-engine — logs</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:#080c10;color:#c9d1d9;padding:1rem}
+header{display:flex;align-items:center;gap:1rem;margin-bottom:1rem;border-bottom:1px solid #21262d;padding-bottom:.75rem}
+.logo{color:#58a6ff;font-weight:bold;font-size:1.2rem}
+a{color:#58a6ff;text-decoration:none}
+.badge{background:#1a2f4a;color:#58a6ff;border:1px solid #30363d;padding:2px 8px;border-radius:10px;font-size:.75rem}
+#log-box{background:#010409;border:1px solid #21262d;border-radius:6px;padding:1rem;height:calc(100vh - 120px);overflow-y:auto;font-size:.82rem;line-height:1.6}
+.INFO{color:#3fb950}.WARN{color:#d29922}.ERROR{color:#f85149}.DEBUG{color:#6e7681}
+.ts{color:#30363d;margin-right:.5rem}
+#status{font-size:.75rem;color:#6e7681;margin-left:auto}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">AXIOM-ENGINE</span>
+  <span class="badge">LIVE LOGS</span>
+  <a href="/">← dashboard</a>
+  <span id="status">connecting...</span>
+</header>
+<div id="log-box"></div>
+<script>
+const box = document.getElementById('log-box');
+const status = document.getElementById('status');
+let count = 0;
+
+function addLine(line) {
+  const div = document.createElement('div');
+  // Detect log level
+  const level = line.includes(' INFO ') ? 'INFO'
+    : line.includes(' WARN ') ? 'WARN'
+    : line.includes(' ERROR ') ? 'ERROR'
+    : line.includes(' DEBUG ') ? 'DEBUG' : '';
+  if (level) div.className = level;
+  div.textContent = line;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  count++;
+  status.textContent = `${count} lines — ${new Date().toLocaleTimeString()}`;
+}
+
+// Poll trace_snapshot every 2s for activity log
+async function pollTrace() {
+  try {
+    const r = await fetch('/tools', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tool:'trace_snapshot',input:{}})
+    });
+    const d = await r.json();
+    const entries = d.result?.entries || [];
+    if (entries.length !== lastCount) {
+      entries.slice(lastCount).forEach(e => {
+        addLine(`[${e.timestamp || new Date().toISOString()}] INFO  ${e.tool} input=${JSON.stringify(e.input)} duration=${e.duration_us}µs`);
+      });
+      lastCount = entries.length;
+    }
+  } catch(e) {}
+}
+
+// Also poll store stats
+async function pollStats() {
+  try {
+    const r = await fetch('/tools', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tool:'store_stats',input:{}})
+    });
+    const d = await r.json();
+    const t = d.result?.total || 0;
+    if (t !== lastCache) {
+      addLine(`[${new Date().toISOString()}] INFO  store cache_total=${t} persistent=true`);
+      lastCache = t;
+    }
+  } catch(e) {}
+}
+
+let lastCount = 0, lastCache = 0;
+
+// Initial engine start log
+addLine(`[${new Date().toISOString()}] INFO  axiom-engine HTTP server running on 0.0.0.0:8080`);
+addLine(`[${new Date().toISOString()}] INFO  transport=HTTP2 store=persistent zk=phase-5`);
+status.textContent = 'live';
+
+setInterval(pollTrace, 2000);
+setInterval(pollStats, 3000);
+</script>
+</body>
+</html>"#)
 }
 
 async fn dashboard(_state: State<AppState>) -> impl IntoResponse {
@@ -180,7 +278,7 @@ section h2{color:#e6edf3;margin:1.5rem 0 .5rem;font-size:1.1rem;border-bottom:1p
   <span class="badge green">RUNNING</span>
   <span class="badge blue">v0.1.0</span>
   <span class="badge blue">HTTP2</span>
-  <span style="margin-left:auto;font-size:.8rem;color:#6e7681">Proof-Augmented AI Agent Engine in Rust</span>
+  <a href="/logs" style="margin-left:auto;font-size:.8rem;color:#58a6ff;text-decoration:none">Live Logs →</a>
 </header>
 <main>
   <div class="status-row" id="status-row">
