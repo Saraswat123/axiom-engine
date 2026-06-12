@@ -1,0 +1,19 @@
+agents:
+  claude:
+    owns:
+      - crates/agent/**
+      - crates/z3-tool/**
+      - crates/zk-proof/**
+    branch_prefix: claude/
+
+  copilot:
+    owns:
+      - crates/compute/**
+      - crates/egg-tool/**
+    branch_prefix: copilot/
+
+  gemini:
+    owns:
+      - crates/mcp-server/**
+      - guest/**
+    branch_prefix: gemini/

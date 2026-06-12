@@ -1,0 +1,4 @@
+/target
+.env
+*.orig
+.DS_Store

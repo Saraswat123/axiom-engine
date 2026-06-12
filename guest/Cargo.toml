@@ -1,0 +1,9 @@
+[package]
+name = "axiom-guest"
+version = "0.1.0"
+edition = "2021"
+
+# RISC Zero guest — runs inside zkVM
+# Activated in Phase 5
+[dependencies]
+serde = { workspace = true }

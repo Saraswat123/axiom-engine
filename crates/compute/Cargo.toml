@@ -1,0 +1,11 @@
+[package]
+name = "axiom-compute"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+nalgebra = "0.33"
+rayon = "1.10"
