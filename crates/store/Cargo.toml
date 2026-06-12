@@ -12,3 +12,4 @@ dashmap = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 bytes = { workspace = true }
+sled = "0.34"

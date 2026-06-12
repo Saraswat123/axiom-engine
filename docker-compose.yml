@@ -9,7 +9,10 @@ services:
       - AXIOM_PROVIDER=${AXIOM_PROVIDER:-anthropic}
       - AXIOM_MODEL=${AXIOM_MODEL:-claude-sonnet-4-6}
       - RUST_LOG=${RUST_LOG:-axiom=info,tower_http=info}
+      - AXIOM_STORE_PATH=/data/axiom-store
       - PORT=8080
+    volumes:
+      - axiom-data:/data
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s
@@ -61,6 +64,10 @@ services:
     networks:
       - axiom-net
     profiles: ["monitoring", "full"]
+
+volumes:
+  axiom-data:
+    driver: local
 
 networks:
   axiom-net:
