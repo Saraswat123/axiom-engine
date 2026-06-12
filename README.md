@@ -26,7 +26,8 @@ This matters most in high-stakes domains: protocol design, financial computation
 | No replay capability | Deterministic trace hash — any node can re-derive the same result |
 | No runtime invariants | Formal invariant registry — Z3 checks domain bounds on every call |
 | No multi-party trust | P2P proof broadcast + AggregatedProof composition (Phase 6) |
-| Confidential but auditable | AWS Nitro TEE attestation anchor (Phase 7) |
+| Classical crypto broken by quantum computers | ML-KEM-768 + ML-DSA-65 post-quantum identity (Phase 7) |
+| Confidential but auditable | AWS Nitro TEE attestation anchor (Phase 8) |
 
 The result: a computation engine where **trust is replaced by proof**.
 
@@ -50,7 +51,8 @@ Output:
 Three guarantee layers:
 - **Z3 SMT** — logical correctness for all inputs in domain
 - **RISC Zero ZK** — cryptographic proof computation ran correctly (Phase 5)
-- **Nitro TEE** — confidential execution, attestation anchor on-chain (Phase 7)
+- **Post-quantum identity** — ML-DSA-65 signed proof commitments, ML-KEM-768 session keys (Phase 7)
+- **Nitro TEE** — confidential execution, attestation anchor on-chain (Phase 8)
 
 ---
 
@@ -108,8 +110,9 @@ axiom-engine/
 │   ├── store/           DashMap artifact cache + field blob storage
 │   ├── trace/           Deterministic replay log for ZK guest
 │   ├── p2p-transport/   libp2p swarm — gossipsub + Kademlia DHT (Phase 6 ✅)
+│   ├── pq-crypto/       ML-KEM-768 + ML-DSA-65 post-quantum crypto (Phase 7 ✅)
 │   └── mcp-server/      axum HTTP2 + stdio MCP server
-├── guest/               RISC Zero guest (Phase 5)
+├── crates/zk-proof/guest/  RISC Zero guest (Phase 5)
 ├── tests/               Integration test suite (HTTP)
 ├── testnet/             Devnet → public testnet spec
 ├── .agents/
@@ -292,6 +295,88 @@ POST /tools {"tool":"zk_prove","input":{"op":"sum","data":[1,2,3]}}
 
 ---
 
+## Phase 7 — Post-Quantum Cryptography
+
+ML-KEM-768 and ML-DSA-65 (NIST FIPS 203/204) replace classical X25519 and Ed25519. Every node has a permanent post-quantum identity. Every ZK proof commitment is signed before broadcast.
+
+### Why Post-Quantum
+
+| Classical Algorithm | Threat | Replacement |
+|---|---|---|
+| X25519 (ECDH) | Shor's algorithm breaks elliptic-curve DH in polynomial time on a quantum computer | ML-KEM-768 (CRYSTALS-Kyber) |
+| Ed25519 (signatures) | Same — discrete log problem broken | ML-DSA-65 (CRYSTALS-Dilithium) |
+
+Harvest-now-decrypt-later: adversaries record ciphertext today, decrypt when quantum hardware arrives. ZK proof receipts need long-term confidentiality — classical crypto is insufficient.
+
+### Key Sizes
+
+| Type | Algorithm | Size |
+|---|---|---|
+| Verifying key (public) | ML-DSA-65 | 1952 bytes |
+| Signature | ML-DSA-65 | 3309 bytes |
+| Encapsulation key (public) | ML-KEM-768 | 1184 bytes |
+| Ciphertext | ML-KEM-768 | 1088 bytes |
+| Shared secret | ML-KEM-768 | 32 bytes |
+
+### Architecture
+
+```
+Node startup:
+  PqIdentity::generate()      ← ML-DSA-65 signing keypair (OS randomness)
+  PqKem::generate()           ← ML-KEM-768 decapsulation keypair
+
+Proof broadcast flow:
+  zk_prove() → AggregatedProof → SignedProof::sign(commitment, op, &identity)
+             → gossipsub broadcast with ML-DSA-65 signature
+             → receivers: SignedProof::verify() before accepting commitment
+
+Session key exchange (peer-to-peer):
+  Initiator: peer sends ek_bytes (ML-KEM encapsulation key)
+  Responder: PqKem::encapsulate(ek_bytes) → (ciphertext, shared_secret)
+  Initiator: PqKem::decapsulate(ciphertext) → same shared_secret
+```
+
+### API
+
+```bash
+# Node PQ identity status
+GET /pq/status
+# → {"enabled":true,"signature_algorithm":"ML-DSA-65 (CRYSTALS-Dilithium, NIST FIPS 204)",
+#    "kem_algorithm":"ML-KEM-768 (CRYSTALS-Kyber, NIST FIPS 203)",
+#    "peer_id_prefix":"a3f7...","vk_bytes":1952,"sig_bytes":3309,...}
+
+# Sign arbitrary message with node ML-DSA-65 identity
+POST /tools {"tool":"pq_sign","input":{"message":"deadbeef"}}
+# → {"signature":"<3309-byte hex>","verifying_key":"<1952-byte hex>","algorithm":"ML-DSA-65"}
+
+# Verify a ML-DSA-65 signature
+POST /tools {"tool":"pq_verify","input":{"verifying_key":"...","message":"...","signature":"..."}}
+# → {"valid":true,"algorithm":"ML-DSA-65 (NIST FIPS 204)"}
+
+# ML-KEM-768 roundtrip (keygen + encapsulate + decapsulate)
+POST /tools {"tool":"pq_kem","input":{}}
+# → {"ek_bytes":1184,"ciphertext_bytes":1088,"shared_secret_bytes":32,"roundtrip_verified":true}
+
+# Sign a ZK proof commitment
+POST /tools {"tool":"pq_sign_proof","input":{"commitment":"<32-byte hex>","op":"sum"}}
+# → {"commitment":"...","op":"sum","signature":"...","verifying_key":"...","algorithm":"ML-DSA-65 (NIST FIPS 204)","verified":true}
+```
+
+### Crate
+
+```
+crates/pq-crypto/
+├── Cargo.toml   ml-dsa 0.1.1  +  ml-kem 0.3.2 (getrandom)
+└── src/
+    └── lib.rs
+        ├── PqIdentity   — ML-DSA-65 keypair, sign/verify, peer_id_hex
+        ├── PqKem        — ML-KEM-768 keypair, encapsulate/decapsulate
+        ├── SignedProof  — ZK commitment signed with ML-DSA-65, gossipsub-ready
+        └── PqStatus     — JSON-serializable status summary
+```
+
+---
+
 ## Build Phases
 
 | Phase | Status | Description |
@@ -302,7 +387,7 @@ POST /tools {"tool":"zk_prove","input":{"op":"sum","data":[1,2,3]}}
 | 4 | ✅ | Pipeline + store + trace |
 | 5 | ✅ | RISC Zero ZK proof generation |
 | 6 | ✅ | libp2p P2P proof broadcast |
-| 7 | 🔲 | Post-quantum keys (Kyber/Dilithium) |
+| 7 | ✅ | Post-quantum keys (ML-KEM-768 + ML-DSA-65) |
 | 8 | 🔲 | AWS Nitro TEE attestation anchor |
 
 ---

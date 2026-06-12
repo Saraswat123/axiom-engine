@@ -1,0 +1,13 @@
+[package]
+name = "axiom-pq"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+hex = "0.4.3"
+ml-dsa = "0.1.1"
+ml-kem = { version = "0.3.2", features = ["getrandom"] }
+rand_core = "0.10.1"
+serde.workspace = true
+sha2 = "0.11.0"

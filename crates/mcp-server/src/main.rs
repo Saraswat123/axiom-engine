@@ -15,6 +15,7 @@ use tracing::info;
 use axiom_compute::ComputeTool;
 use axiom_egg_tool::EggTool;
 use axiom_p2p::{MessageTopic, P2pHandle, P2pNode};
+use axiom_pq::{PqIdentity, PqKem, PqStatus, SignedProof};
 use axiom_pipeline::OptVerify;
 use axiom_store::ArtifactStore;
 use axiom_trace::TraceRecorder;
@@ -32,12 +33,15 @@ pub struct AppState {
     compute: Arc<ComputeTool>,
     zk: Arc<ZkProofTool>,
     p2p: Option<P2pHandle>,
+    pq: Arc<PqIdentity>,
 }
 
 impl AppState {
     fn new(p2p: Option<P2pHandle>) -> Self {
         let store = ArtifactStore::new();
         let trace = TraceRecorder::new();
+        let pq = Arc::new(PqIdentity::generate());
+        info!(peer_id = %pq.peer_id_hex(), "PQ identity generated (ML-DSA-65)");
         Self {
             store,
             trace,
@@ -46,6 +50,7 @@ impl AppState {
             compute: Arc::new(ComputeTool::new()),
             zk: Arc::new(ZkProofTool::new()),
             p2p,
+            pq,
         }
     }
 
@@ -93,6 +98,62 @@ impl AppState {
                 } else {
                     Ok(json!({ "enabled": false, "hint": "set AXIOM_P2P_ENABLED=1 to start swarm" }))
                 }
+            }
+            // ── Post-quantum tools ────────────────────────────────────────────
+            "pq_status" => {
+                Ok(serde_json::to_value(PqStatus::from_identity(&self.pq))?)
+            }
+            "pq_sign" => {
+                let msg = input["message"].as_str().unwrap_or("").as_bytes().to_vec();
+                let sig = self.pq.sign(&msg);
+                Ok(json!({
+                    "signature": hex::encode(&sig),
+                    "verifying_key": hex::encode(&self.pq.public_key_bytes()),
+                    "algorithm": "ML-DSA-65 (NIST FIPS 204)",
+                    "sig_bytes": sig.len(),
+                }))
+            }
+            "pq_verify" => {
+                let vk_hex = input["verifying_key"].as_str().unwrap_or("");
+                let sig_hex = input["signature"].as_str().unwrap_or("");
+                let msg = input["message"].as_str().unwrap_or("").as_bytes().to_vec();
+                let vk = hex::decode(vk_hex)?;
+                let sig = hex::decode(sig_hex)?;
+                let valid = PqIdentity::verify_signature(&vk, &msg, &sig)?;
+                Ok(json!({ "valid": valid, "algorithm": "ML-DSA-65 (NIST FIPS 204)" }))
+            }
+            "pq_kem" => {
+                let (kem, ek_bytes) = PqKem::generate();
+                let ek_hex = hex::encode(&ek_bytes);
+                let (ct, shared_secret) = PqKem::encapsulate(&ek_bytes)?;
+                let k2 = kem.decapsulate(&ct)?;
+                Ok(json!({
+                    "algorithm": "ML-KEM-768 (NIST FIPS 203)",
+                    "encapsulation_key_hex": ek_hex,
+                    "ciphertext_bytes": ct.len(),
+                    "shared_secret_bytes": shared_secret.len(),
+                    "roundtrip_verified": shared_secret == k2,
+                }))
+            }
+            "pq_sign_proof" => {
+                let commitment_hex = input["commitment"].as_str().unwrap_or("");
+                let op = input["op"].as_str().unwrap_or("unknown");
+                let commitment_bytes = hex::decode(commitment_hex)?;
+                if commitment_bytes.len() != 32 {
+                    anyhow::bail!("commitment must be 32 bytes hex");
+                }
+                let mut commitment = [0u8; 32];
+                commitment.copy_from_slice(&commitment_bytes);
+                let sp = SignedProof::sign(commitment, op, &self.pq);
+                let valid = sp.verify()?;
+                Ok(json!({
+                    "commitment": sp.commitment_hex(),
+                    "op": sp.op,
+                    "signature_hex": hex::encode(&sp.signature),
+                    "verifying_key_hex": hex::encode(&sp.verifying_key),
+                    "algorithm": sp.algorithm,
+                    "verified": valid,
+                }))
             }
             "p2p_broadcast" => {
                 if let Some(ref p2p) = self.p2p {
@@ -155,6 +216,7 @@ async fn run_http(state: AppState) -> Result<()> {
         .route("/health", get(health))
         .route("/logs", get(logs_page))
         .route("/p2p/status", get(p2p_status_handler))
+        .route("/pq/status", get(pq_status_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -186,6 +248,13 @@ async fn tool_call_handler(
 
 async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok", "engine": "axiom-engine", "version": "0.1.0" }))
+}
+
+async fn pq_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.dispatch("pq_status", json!({})).await {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+    }
 }
 
 async fn p2p_status_handler(State(state): State<AppState>) -> impl IntoResponse {

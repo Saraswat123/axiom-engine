@@ -27,3 +27,5 @@ axiom-pipeline = { path = "../pipeline" }
 axiom-store = { path = "../store" }
 axiom-trace = { path = "../trace" }
 axiom-p2p = { path = "../p2p-transport" }
+axiom-pq = { path = "../pq-crypto" }
+hex = "0.4.3"

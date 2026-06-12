@@ -11,6 +11,7 @@ members = [
     "crates/p2p-transport",
     "crates/mcp-server",
     "crates/zk-proof/guest",
+    "crates/pq-crypto",
 ]
 resolver = "2"
 
