@@ -126,70 +126,240 @@ async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok", "engine": "axiom-engine", "version": "0.1.0" }))
 }
 
-async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
-    let stats = state.store.stats();
-    Html(format!(r#"<!DOCTYPE html>
-<html>
+async fn dashboard(_state: State<AppState>) -> impl IntoResponse {
+    Html(DASHBOARD_HTML)
+}
+
+static DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>axiom-engine</title>
-  <style>
-    body {{ font-family: monospace; background: #0d0d0d; color: #e0e0e0; padding: 2rem; }}
-    h1 {{ color: #7fff7f; }} h2 {{ color: #7fd4ff; margin-top: 2rem; }}
-    .badge {{ display:inline-block; background:#1a3a1a; color:#7fff7f; border:1px solid #7fff7f; padding:2px 8px; border-radius:4px; }}
-    .card {{ background:#1a1a1a; border:1px solid #333; border-radius:8px; padding:1rem; margin:0.5rem 0; }}
-    pre {{ background:#111; padding:1rem; border-radius:6px; overflow-x:auto; color:#ccc; }}
-    a {{ color:#7fd4ff; }}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>axiom-engine</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:#080c10;color:#c9d1d9;min-height:100vh}
+header{background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);border-bottom:1px solid #21262d;padding:1.5rem 2rem;display:flex;align-items:center;gap:1rem}
+.logo{font-size:2rem;font-weight:bold;color:#58a6ff;letter-spacing:2px}
+.logo span{color:#3fb950}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:bold;margin-left:.5rem}
+.badge.green{background:#1a4428;color:#3fb950;border:1px solid #3fb950}
+.badge.blue{background:#1a2f4a;color:#58a6ff;border:1px solid #58a6ff}
+main{padding:2rem;max-width:1200px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1.5rem 0}
+.card{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:1.25rem}
+.card h3{color:#58a6ff;margin-bottom:.75rem;font-size:.9rem;text-transform:uppercase;letter-spacing:1px}
+.stat-val{font-size:2.5rem;font-weight:bold;color:#3fb950}
+.stat-label{font-size:.8rem;color:#6e7681;margin-top:.25rem}
+.tool-row{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid #161b22;cursor:pointer}
+.tool-row:last-child{border-bottom:none}
+.tool-row:hover{background:#161b22;margin:0 -.75rem;padding:.5rem .75rem;border-radius:4px}
+.tool-dot{width:8px;height:8px;border-radius:50%;background:#3fb950;flex-shrink:0}
+.tool-name{color:#58a6ff;font-weight:bold;font-size:.9rem;min-width:140px}
+.tool-desc{color:#8b949e;font-size:.8rem}
+.phase-row{display:flex;align-items:center;gap:.75rem;padding:.4rem 0}
+.phase-icon{font-size:1rem;width:20px;text-align:center}
+.phase-done{color:#3fb950}
+.phase-todo{color:#30363d}
+.phase-label{font-size:.85rem}
+section h2{color:#e6edf3;margin:1.5rem 0 .5rem;font-size:1.1rem;border-bottom:1px solid #21262d;padding-bottom:.5rem}
+.tester{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:1.25rem;margin-top:1rem}
+.tester select,.tester input,.tester textarea{background:#010409;border:1px solid #30363d;color:#c9d1d9;padding:.5rem .75rem;border-radius:6px;font-family:inherit;font-size:.875rem;width:100%;margin:.4rem 0}
+.tester select:focus,.tester input:focus,.tester textarea:focus{outline:none;border-color:#58a6ff}
+.btn{background:#238636;color:#fff;border:none;padding:.6rem 1.25rem;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:bold;margin-top:.5rem}
+.btn:hover{background:#2ea043}
+.result{background:#010409;border:1px solid #21262d;border-radius:6px;padding:1rem;margin-top:.75rem;font-size:.85rem;white-space:pre-wrap;color:#3fb950;display:none;max-height:300px;overflow-y:auto}
+.status-row{display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0}
+.status-chip{background:#161b22;border:1px solid #21262d;border-radius:6px;padding:.4rem .8rem;font-size:.8rem}
+.status-chip span{color:#3fb950;font-weight:bold}
+</style>
 </head>
 <body>
-  <h1>⬡ axiom-engine <span class="badge">v0.1.0</span> <span class="badge">RUNNING</span></h1>
-  <p>Proof-augmented AI agent engine in Rust — Z3 + egg + nalgebra + ZK</p>
-
-  <h2>Status</h2>
-  <div class="card">
-    <b>Artifact cache:</b> {total} items &nbsp;|&nbsp;
-    <b>Transport:</b> HTTP2 (axum) &nbsp;|&nbsp;
-    <b>ZK:</b> Phase 5 (pending)
+<header>
+  <div class="logo">AXIOM<span>-ENGINE</span></div>
+  <span class="badge green">RUNNING</span>
+  <span class="badge blue">v0.1.0</span>
+  <span class="badge blue">HTTP2</span>
+  <span style="margin-left:auto;font-size:.8rem;color:#6e7681">Proof-Augmented AI Agent Engine in Rust</span>
+</header>
+<main>
+  <div class="status-row" id="status-row">
+    <div class="status-chip">Cache items: <span id="cache-total">-</span></div>
+    <div class="status-chip">Trace entries: <span id="trace-count">-</span></div>
+    <div class="status-chip">Transport: <span>HTTP2 (axum)</span></div>
+    <div class="status-chip">ZK: <span>Phase 5</span></div>
   </div>
 
-  <h2>Available Tools</h2>
-  <div class="card">
-    <b>opt_verify</b> — egg optimization + Z3 soundness (cached)<br>
-    <b>z3_prove</b> — formal SMT verification<br>
-    <b>egg_optimize</b> — equality saturation<br>
-    <b>compute_matrix</b> — nalgebra + BN254 field blobs<br>
-    <b>store_stats</b> — artifact cache stats<br>
-    <b>trace_snapshot</b> — deterministic replay trace
+  <div class="grid">
+    <div class="card">
+      <h3>Artifact Cache</h3>
+      <div class="stat-val" id="stat-cache">-</div>
+      <div class="stat-label">memoized results (DashMap)</div>
+    </div>
+    <div class="card">
+      <h3>Trace Entries</h3>
+      <div class="stat-val" id="stat-trace">-</div>
+      <div class="stat-label">deterministic replay log</div>
+    </div>
+    <div class="card">
+      <h3>Engine Stack</h3>
+      <div style="font-size:.8rem;line-height:1.8;color:#8b949e">
+        Z3 12.x &nbsp;·&nbsp; egg 0.9 &nbsp;·&nbsp; nalgebra 0.33<br>
+        ark-ff BN254 &nbsp;·&nbsp; rayon &nbsp;·&nbsp; axum 0.7<br>
+        Rust 1.93 &nbsp;·&nbsp; tokio async
+      </div>
+    </div>
   </div>
 
-  <h2>Quick Test</h2>
-  <pre>curl -X POST http://localhost:8080/tools \
-  -H "Content-Type: application/json" \
-  -d '{{"tool":"opt_verify","input":{{"expression":"(+ x 0)"}}}}'</pre>
+  <section>
+    <h2>Tools</h2>
+    <div class="card">
+      <div class="tool-row" onclick="setTool('opt_verify','(+ x 0)')">
+        <div class="tool-dot"></div>
+        <div class="tool-name">opt_verify</div>
+        <div class="tool-desc">egg optimization + Z3 soundness in one pipeline (cached)</div>
+      </div>
+      <div class="tool-row" onclick="setTool('z3_prove','square_positive')">
+        <div class="tool-dot"></div>
+        <div class="tool-name">z3_prove</div>
+        <div class="tool-desc">formal SMT verification — returns proved / counterexample</div>
+      </div>
+      <div class="tool-row" onclick="setTool('egg_optimize','(* x 1)')">
+        <div class="tool-dot"></div>
+        <div class="tool-name">egg_optimize</div>
+        <div class="tool-desc">equality saturation — finds minimal equivalent expression</div>
+      </div>
+      <div class="tool-row" onclick="setTool('compute_matrix','field_blob')">
+        <div class="tool-dot"></div>
+        <div class="tool-name">compute_matrix</div>
+        <div class="tool-desc">nalgebra + rayon parallel math + BN254 field blobs for ZK</div>
+      </div>
+      <div class="tool-row" onclick="callTool('store_stats',{})">
+        <div class="tool-dot"></div>
+        <div class="tool-name">store_stats</div>
+        <div class="tool-desc">artifact cache statistics</div>
+      </div>
+      <div class="tool-row" onclick="callTool('trace_snapshot',{})">
+        <div class="tool-dot"></div>
+        <div class="tool-name">trace_snapshot</div>
+        <div class="tool-desc">current deterministic execution trace for ZK replay</div>
+      </div>
+    </div>
+  </section>
 
-  <h2>Endpoints</h2>
-  <div class="card">
-    <a href="/health">GET /health</a> — liveness check<br>
-    POST /tools — tool call API<br>
-    POST /mcp — MCP JSON-RPC 2.0
-  </div>
+  <section>
+    <h2>Live Tool Tester</h2>
+    <div class="tester">
+      <select id="tool-select" onchange="onToolChange()">
+        <option value="opt_verify">opt_verify</option>
+        <option value="z3_prove">z3_prove</option>
+        <option value="egg_optimize">egg_optimize</option>
+        <option value="compute_matrix">compute_matrix</option>
+        <option value="store_stats">store_stats</option>
+        <option value="trace_snapshot">trace_snapshot</option>
+      </select>
+      <textarea id="tool-input" rows="4">{"expression": "(+ x 0)"}</textarea>
+      <button class="btn" onclick="runTool()">Run Tool</button>
+      <div class="result" id="tool-result"></div>
+    </div>
+  </section>
 
-  <h2>Build Phases</h2>
-  <div class="card">
-    ✅ Phase 1-4 — Z3, egg, compute, pipeline, store, trace, HTTP2, Docker<br>
-    🔲 Phase 5 — RISC Zero ZK proof generation<br>
-    🔲 Phase 6 — libp2p P2P broadcast<br>
-    🔲 Phase 7 — Post-quantum keys (Kyber/Dilithium)<br>
-    🔲 Phase 8 — AWS Nitro TEE attestation
-  </div>
+  <section>
+    <h2>Build Phases</h2>
+    <div class="card">
+      <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 1-4 — Z3, egg, compute, pipeline, store, trace, HTTP2, Docker</span></div>
+      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 5 — RISC Zero ZK proof generation</span></div>
+      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 6 — libp2p P2P proof broadcast</span></div>
+      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 7 — Post-quantum keys (Kyber / Dilithium)</span></div>
+      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 8 — AWS Nitro TEE attestation anchor</span></div>
+    </div>
+  </section>
 
-  <p style="color:#555;margin-top:2rem;">
-    <a href="https://github.com/Saraswat123/axiom-engine">github.com/Saraswat123/axiom-engine</a>
+  <p style="margin-top:2rem;font-size:.8rem;color:#6e7681">
+    <a href="https://github.com/Saraswat123/axiom-engine" style="color:#58a6ff">github.com/Saraswat123/axiom-engine</a>
+    &nbsp;·&nbsp; <a href="/health" style="color:#58a6ff">GET /health</a>
   </p>
-</body>
-</html>"#, total = stats.total))
+</main>
+
+<script>
+const TOOLS = {
+  opt_verify:     '{"expression": "(+ x 0)"}',
+  z3_prove:       '{"property": "square_positive", "low": 1, "high": 1000}',
+  egg_optimize:   '{"expression": "(* x 1)"}',
+  compute_matrix: '{"op": "field_blob", "data": [1,0,0,1]}',
+  store_stats:    '{}',
+  trace_snapshot: '{}'
+};
+
+function onToolChange() {
+  const t = document.getElementById('tool-select').value;
+  document.getElementById('tool-input').value = TOOLS[t] || '{}';
 }
+
+function setTool(name, hint) {
+  document.getElementById('tool-select').value = name;
+  onToolChange();
+}
+
+async function callTool(name, input) {
+  document.getElementById('tool-select').value = name;
+  document.getElementById('tool-input').value = JSON.stringify(input, null, 2);
+  await runTool();
+}
+
+async function runTool() {
+  const tool = document.getElementById('tool-select').value;
+  let input;
+  try { input = JSON.parse(document.getElementById('tool-input').value); }
+  catch(e) { showResult('JSON parse error: ' + e.message); return; }
+
+  showResult('Running...');
+  try {
+    const r = await fetch('/tools', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tool, input})
+    });
+    const data = await r.json();
+    showResult(JSON.stringify(data, null, 2));
+  } catch(e) { showResult('Error: ' + e.message); }
+}
+
+function showResult(text) {
+  const el = document.getElementById('tool-result');
+  el.style.display = 'block';
+  el.textContent = text;
+}
+
+async function refreshStats() {
+  try {
+    const r = await fetch('/tools', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tool:'store_stats',input:{}})
+    });
+    const d = await r.json();
+    const total = d.result?.total ?? 0;
+    document.getElementById('stat-cache').textContent = total;
+    document.getElementById('cache-total').textContent = total;
+
+    const r2 = await fetch('/tools', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tool:'trace_snapshot',input:{}})
+    });
+    const d2 = await r2.json();
+    const entries = d2.result?.entries?.length ?? 0;
+    document.getElementById('stat-trace').textContent = entries;
+    document.getElementById('trace-count').textContent = entries;
+  } catch(e) {}
+}
+
+refreshStats();
+setInterval(refreshStats, 5000);
+</script>
+</body>
+</html>"#;
 
 /// stdio transport — MCP protocol (JSON-RPC 2.0, newline-delimited)
 async fn run_stdio(state: AppState) -> Result<()> {
