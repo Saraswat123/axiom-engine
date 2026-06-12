@@ -107,7 +107,7 @@ axiom-engine/
 │   ├── pipeline/        OptVerify combinator (egg→Z3, cached)
 │   ├── store/           DashMap artifact cache + field blob storage
 │   ├── trace/           Deterministic replay log for ZK guest
-│   ├── p2p-transport/   libp2p swarm scaffold (Phase 6)
+│   ├── p2p-transport/   libp2p swarm — gossipsub + Kademlia DHT (Phase 6 ✅)
 │   └── mcp-server/      axum HTTP2 + stdio MCP server
 ├── guest/               RISC Zero guest (Phase 5)
 ├── tests/               Integration test suite (HTTP)
@@ -235,6 +235,63 @@ CI blocks merge if any critical invariant fails verification.
 
 ---
 
+## Phase 6 — P2P Proof Broadcast
+
+libp2p 0.56 swarm with gossipsub pub/sub and Kademlia DHT peer discovery. Every ZK proof commitment is broadcast to the network the moment it's generated.
+
+### Architecture
+
+```
+Node A ──gossipsub──► Node B ──gossipsub──► Node C
+  │                     │
+  ▼                     ▼
+axiom/proof/v1       axiom/proof/v1        (all nodes subscribe)
+axiom/trace/v1       axiom/prove-req/v1    (distributed proving)
+```
+
+Four gossipsub topics:
+- `axiom/proof/v1` — ZK receipt commitments broadcast after every `zk_prove`
+- `axiom/prove-req/v1` — request distributed proof generation from cluster
+- `axiom/trace/v1` — execution trace hash gossip (audit trail)
+- `axiom/invariant/v1` — invariant registry updates
+
+### Start a Cluster
+
+```bash
+# Node 1 (bootstrap)
+AXIOM_TRANSPORT=http PORT=8080 AXIOM_P2P_ENABLED=1 AXIOM_P2P_PORT=9000 \
+  cargo run -p axiom-mcp-server
+
+# Node 2 — dial node 1 on boot
+AXIOM_TRANSPORT=http PORT=8081 AXIOM_P2P_ENABLED=1 AXIOM_P2P_PORT=9001 \
+  AXIOM_PEERS="/ip4/<node1-ip>/tcp/9000" \
+  cargo run -p axiom-mcp-server
+```
+
+### P2P API
+
+```bash
+# Node status and peer count
+GET /p2p/status
+
+# Manual gossipsub broadcast (any topic)
+POST /tools {"tool":"p2p_broadcast","input":{"topic":"proof","payload":"..."}}
+
+# ZK proof auto-broadcasts commitment on every zk_prove call
+POST /tools {"tool":"zk_prove","input":{"op":"sum","data":[1,2,3]}}
+# → broadcasts {"commitment":"0x...","op":"sum"} to axiom/proof/v1
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `AXIOM_P2P_ENABLED` | `0` | Set to `1` to start the swarm |
+| `AXIOM_P2P_PORT` | `9000` | TCP listen port for libp2p |
+| `AXIOM_PEERS` | — | Comma-separated multiaddrs to dial on start |
+
+---
+
 ## Build Phases
 
 | Phase | Status | Description |
@@ -243,8 +300,8 @@ CI blocks merge if any critical invariant fails verification.
 | 2 | ✅ | Agent loop (multi-model) |
 | 3 | ✅ | MCP server HTTP2 + stdio |
 | 4 | ✅ | Pipeline + store + trace |
-| 5 | 🔲 | RISC Zero ZK proof generation |
-| 6 | 🔲 | libp2p P2P proof broadcast |
+| 5 | ✅ | RISC Zero ZK proof generation |
+| 6 | ✅ | libp2p P2P proof broadcast |
 | 7 | 🔲 | Post-quantum keys (Kyber/Dilithium) |
 | 8 | 🔲 | AWS Nitro TEE attestation anchor |
 

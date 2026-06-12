@@ -14,6 +14,7 @@ use tracing::info;
 
 use axiom_compute::ComputeTool;
 use axiom_egg_tool::EggTool;
+use axiom_p2p::{MessageTopic, P2pHandle, P2pNode};
 use axiom_pipeline::OptVerify;
 use axiom_store::ArtifactStore;
 use axiom_trace::TraceRecorder;
@@ -30,10 +31,11 @@ pub struct AppState {
     egg: Arc<EggTool>,
     compute: Arc<ComputeTool>,
     zk: Arc<ZkProofTool>,
+    p2p: Option<P2pHandle>,
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(p2p: Option<P2pHandle>) -> Self {
         let store = ArtifactStore::new();
         let trace = TraceRecorder::new();
         Self {
@@ -43,6 +45,7 @@ impl AppState {
             egg: Arc::new(EggTool::new()),
             compute: Arc::new(ComputeTool::new()),
             zk: Arc::new(ZkProofTool::new()),
+            p2p,
         }
     }
 
@@ -51,7 +54,21 @@ impl AppState {
             "z3_prove" => self.z3.prove(input).await,
             "egg_optimize" => self.egg.optimize(input).await,
             "compute_matrix" => self.compute.run(input).await,
-            "zk_prove" => self.zk.generate_proof(input).await,
+            "zk_prove" => {
+                let result = self.zk.generate_proof(input).await?;
+                // Broadcast proof commitment over P2P when available
+                if let Some(ref p2p) = self.p2p {
+                    if let Some(commitment) = result.get("commitment").and_then(|v| v.as_str()) {
+                        let payload = serde_json::to_vec(&json!({
+                            "commitment": commitment,
+                            "op": result.get("op"),
+                        }))
+                        .unwrap_or_default();
+                        let _ = p2p.publish(MessageTopic::ProofArtifact, payload).await;
+                    }
+                }
+                Ok(result)
+            }
             "opt_verify" => {
                 let ov = OptVerify::new(self.store.clone(), self.trace.clone());
                 let expr = input["expression"].as_str().unwrap_or("x");
@@ -65,6 +82,34 @@ impl AppState {
                 let snap = self.trace.snapshot().await;
                 Ok(serde_json::to_value(snap)?)
             }
+            "p2p_status" => {
+                if let Some(ref p2p) = self.p2p {
+                    Ok(json!({
+                        "enabled": true,
+                        "peer_id": p2p.local_peer_id().to_string(),
+                        "peers": p2p.peer_count(),
+                        "topics": ["axiom/proof/v1","axiom/prove-req/v1","axiom/trace/v1","axiom/invariant/v1"],
+                    }))
+                } else {
+                    Ok(json!({ "enabled": false, "hint": "set AXIOM_P2P_ENABLED=1 to start swarm" }))
+                }
+            }
+            "p2p_broadcast" => {
+                if let Some(ref p2p) = self.p2p {
+                    let topic_str = input["topic"].as_str().unwrap_or("proof");
+                    let payload = input["payload"].as_str().unwrap_or("").as_bytes().to_vec();
+                    let topic = match topic_str {
+                        "trace" => MessageTopic::TraceGossip,
+                        "invariant" => MessageTopic::InvariantUpdate,
+                        "prove" => MessageTopic::ProveRequest,
+                        _ => MessageTopic::ProofArtifact,
+                    };
+                    p2p.publish(topic, payload).await?;
+                    Ok(json!({ "ok": true, "topic": topic_str, "bytes": input["payload"].as_str().unwrap_or("").len() }))
+                } else {
+                    anyhow::bail!("P2P not enabled — set AXIOM_P2P_ENABLED=1")
+                }
+            }
             _ => anyhow::bail!("unknown tool: {}", name),
         }
     }
@@ -74,7 +119,22 @@ impl AppState {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let state = AppState::new();
+    let p2p = if std::env::var("AXIOM_P2P_ENABLED").unwrap_or_default() == "1" {
+        match P2pNode::from_env().start() {
+            Ok(handle) => {
+                info!(peer_id = %handle.local_peer_id(), "P2P swarm started");
+                Some(handle)
+            }
+            Err(e) => {
+                tracing::warn!("P2P swarm failed to start: {e} — continuing without P2P");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let state = AppState::new(p2p);
     let transport = std::env::var("AXIOM_TRANSPORT").unwrap_or_else(|_| "stdio".to_string());
 
     match transport.as_str() {
@@ -94,6 +154,7 @@ async fn run_http(state: AppState) -> Result<()> {
         .route("/tools", post(tool_call_handler))
         .route("/health", get(health))
         .route("/logs", get(logs_page))
+        .route("/p2p/status", get(p2p_status_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -125,6 +186,13 @@ async fn tool_call_handler(
 
 async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok", "engine": "axiom-engine", "version": "0.1.0" }))
+}
+
+async fn p2p_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.dispatch("p2p_status", json!({})).await {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+    }
 }
 
 async fn logs_page() -> impl IntoResponse {

@@ -11,5 +11,14 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 bytes = { workspace = true }
-# Phase 6 — libp2p full swarm
-# libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "gossipsub", "kad", "request-response", "identify"] }
+libp2p = { version = "0.56.0", features = [
+    "tcp",
+    "noise",
+    "yamux",
+    "gossipsub",
+    "kad",
+    "identify",
+    "ping",
+    "macros",
+    "tokio",
+] }
