@@ -36,8 +36,9 @@ impl Z3Tool {
         // Property: x > 0 → x*x > 0
         match property {
             "square_positive" => {
+                use std::ops::Mul;
                 let zero = Int::from_i64(&ctx, 0);
-                let x_sq = x.mul(&[&x]);
+                let x_sq = x.clone().mul(&x);
                 // Assert negation: x > 0 AND x*x <= 0
                 solver.assert(&x.gt(&zero));
                 solver.assert(&x_sq.le(&zero));
