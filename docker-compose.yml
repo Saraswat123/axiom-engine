@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  axiom-engine:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - AXIOM_TRANSPORT=http
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - RUST_LOG=axiom=debug,tower_http=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Local testnet node (Phase 4)
+  axiom-testnet:
+    image: ethereum/client-go:latest
+    command: >
+      --dev
+      --http --http.addr 0.0.0.0 --http.port 8545
+      --http.api eth,net,web3,debug
+      --ws --ws.addr 0.0.0.0 --ws.port 8546
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+
+  # Prometheus metrics (Phase 4)
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"

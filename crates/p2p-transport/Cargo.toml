@@ -1,0 +1,15 @@
+[package]
+name = "axiom-p2p"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+bytes = { workspace = true }
+# Phase 6 — libp2p full swarm
+# libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "gossipsub", "kad", "request-response", "identify"] }

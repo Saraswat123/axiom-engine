@@ -5,6 +5,10 @@ members = [
     "crates/egg-tool",
     "crates/compute",
     "crates/zk-proof",
+    "crates/pipeline",
+    "crates/trace",
+    "crates/store",
+    "crates/p2p-transport",
     "crates/mcp-server",
     "guest",
 ]
@@ -17,3 +21,13 @@ serde_json = "1"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+dashmap = "6"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+axum = { version = "0.7", features = ["http2"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+bytes = "1"
+futures = "0.3"
+ark-ff = "0.4"
+ark-bn254 = "0.4"

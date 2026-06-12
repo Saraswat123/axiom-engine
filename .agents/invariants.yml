@@ -1,0 +1,43 @@
+# Formal invariant registry — machine-readable constraints Z3 verifies against.
+# Each invariant: id, description, z3_property, domain, criticality.
+
+invariants:
+  - id: INV-001
+    name: square_nonnegative
+    description: "For all real x, x^2 >= 0"
+    z3_property: square_positive
+    domain: { low: -10000, high: 10000 }
+    criticality: critical
+
+  - id: INV-002
+    name: field_element_bounds
+    description: "BN254 field elements must be < p (prime modulus)"
+    z3_property: field_bounds
+    domain: { low: 0, high: 9223372036854775807 }
+    criticality: critical
+
+  - id: INV-003
+    name: trace_monotonic_seq
+    description: "Execution trace sequence numbers strictly increase"
+    z3_property: monotonic_sequence
+    criticality: critical
+
+  - id: INV-004
+    name: proof_bundle_nonempty
+    description: "AggregatedProof must have at least one component"
+    z3_property: nonempty_collection
+    criticality: high
+
+  - id: INV-005
+    name: matrix_determinism
+    description: "Same matrix input always produces same determinant"
+    z3_property: deterministic_function
+    criticality: high
+
+  - id: INV-006
+    name: store_key_collision_free
+    description: "Different inputs produce different content-addressed keys"
+    z3_property: injective_hash
+    criticality: medium
+
+# Z3 pre-check gates CI: if any critical invariant unverifiable, block merge.

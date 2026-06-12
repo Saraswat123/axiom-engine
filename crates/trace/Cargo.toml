@@ -1,5 +1,5 @@
 [package]
-name = "axiom-compute"
+name = "axiom-trace"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,7 @@ edition = "2021"
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
-nalgebra = "0.33"
-rayon = "1.10"
-ark-ff = { workspace = true }
-ark-bn254 = { workspace = true }
-hex = "0.4"
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }

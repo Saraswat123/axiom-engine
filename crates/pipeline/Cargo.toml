@@ -1,0 +1,14 @@
+[package]
+name = "axiom-pipeline"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+axiom-z3-tool = { path = "../z3-tool" }
+axiom-egg-tool = { path = "../egg-tool" }
+axiom-trace = { path = "../trace" }
+axiom-store = { path = "../store" }
