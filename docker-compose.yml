@@ -24,6 +24,26 @@ services:
       - axiom-net
     profiles: ["engine", "full"]
 
+  # axiom-engine with ZK proofs (dev mode — instant mock proofs)
+  axiom-engine-zk:
+    build:
+      context: .
+      dockerfile: Dockerfile.zk
+    ports:
+      - "8081:8080"
+    environment:
+      - AXIOM_TRANSPORT=http
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AXIOM_STORE_PATH=/data/axiom-store
+      - RISC0_DEV_MODE=1
+      - RUST_LOG=axiom=info
+      - PORT=8080
+    volumes:
+      - axiom-data:/data
+    networks:
+      - axiom-net
+    profiles: ["zk"]
+
   # Local Ethereum dev node — Phase 4
   axiom-testnet:
     image: ethereum/client-go:latest

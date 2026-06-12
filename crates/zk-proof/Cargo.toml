@@ -3,9 +3,18 @@ name = "axiom-zk-proof"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+risc0 = ["dep:risc0-zkvm", "dep:risc0-build"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
-# RISC Zero added in Phase 5 — requires separate toolchain setup
-# risc0-zkvm = "1.0"
+tracing = { workspace = true }
+# Activated with --features risc0
+risc0-zkvm = { version = "1.0", optional = true }
+hex = "0.4"
+
+[build-dependencies]
+risc0-build = { version = "1.0", optional = true }
