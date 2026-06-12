@@ -294,6 +294,7 @@ dependencies = [
  "axiom-z3-tool",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 

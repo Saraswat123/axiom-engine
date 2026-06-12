@@ -1,3 +1,5 @@
 [env]
-# macOS (Homebrew) — z3 system library path
 Z3_SYS_Z3_HEADER = "/opt/homebrew/opt/z3/include/z3.h"
+
+[target.aarch64-apple-darwin]
+rustflags = ["-L", "/opt/homebrew/opt/z3/lib"]

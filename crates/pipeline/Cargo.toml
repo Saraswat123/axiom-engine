@@ -12,3 +12,6 @@ axiom-z3-tool = { path = "../z3-tool" }
 axiom-egg-tool = { path = "../egg-tool" }
 axiom-trace = { path = "../trace" }
 axiom-store = { path = "../store" }
+
+[dev-dependencies]
+tokio = { workspace = true }
