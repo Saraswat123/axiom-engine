@@ -12,6 +12,8 @@ jobs:
   # ── Build + unit tests ────────────────────────────────────────────────────
   build-test:
     runs-on: ubuntu-latest
+    env:
+      Z3_SYS_Z3_HEADER: /usr/include/z3.h
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +49,8 @@ jobs:
   p2p-testnet:
     runs-on: ubuntu-latest
     needs: build-test
+    env:
+      Z3_SYS_Z3_HEADER: /usr/include/z3.h
     steps:
       - uses: actions/checkout@v4
 
@@ -135,6 +139,8 @@ jobs:
   tee-pq-smoke:
     runs-on: ubuntu-latest
     needs: build-test
+    env:
+      Z3_SYS_Z3_HEADER: /usr/include/z3.h
     steps:
       - uses: actions/checkout@v4
 
