@@ -14,6 +14,7 @@ use tracing::info;
 
 use axiom_compute::ComputeTool;
 use axiom_egg_tool::EggTool;
+use axiom_nitro::{AttestationAnchor, TeeStatus};
 use axiom_p2p::{MessageTopic, P2pHandle, P2pNode};
 use axiom_pq::{PqIdentity, PqKem, PqStatus, SignedProof};
 use axiom_pipeline::OptVerify;
@@ -60,16 +61,34 @@ impl AppState {
             "egg_optimize" => self.egg.optimize(input).await,
             "compute_matrix" => self.compute.run(input).await,
             "zk_prove" => {
-                let result = self.zk.generate_proof(input).await?;
+                let mut result = self.zk.generate_proof(input).await?;
+                let commitment_hex = result.get("commitment").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let op_str = result.get("op").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
                 // Broadcast proof commitment over P2P when available
                 if let Some(ref p2p) = self.p2p {
-                    if let Some(commitment) = result.get("commitment").and_then(|v| v.as_str()) {
+                    if let Some(ref ch) = commitment_hex {
                         let payload = serde_json::to_vec(&json!({
-                            "commitment": commitment,
-                            "op": result.get("op"),
+                            "commitment": ch,
+                            "op": op_str,
                         }))
                         .unwrap_or_default();
                         let _ = p2p.publish(MessageTopic::ProofArtifact, payload).await;
+                    }
+                }
+                // TEE attestation anchor — bind proof commitment to enclave identity
+                if let Some(ref ch) = commitment_hex {
+                    if let Ok(cb) = hex::decode(ch) {
+                        if cb.len() == 32 {
+                            let mut c = [0u8; 32];
+                            c.copy_from_slice(&cb);
+                            if let Ok(anchor) = AttestationAnchor::from_commitment(&c, &op_str) {
+                                if let Ok(v) = serde_json::to_value(&anchor.attestation) {
+                                    if let Some(obj) = result.as_object_mut() {
+                                        obj.insert("tee_attestation".to_string(), v);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Ok(result)
@@ -155,6 +174,22 @@ impl AppState {
                     "verified": valid,
                 }))
             }
+            // ── TEE attestation tools ─────────────────────────────────────────
+            "tee_status" => {
+                Ok(serde_json::to_value(TeeStatus::current())?)
+            }
+            "tee_attest" => {
+                let commitment_hex = input["commitment"].as_str().unwrap_or("");
+                let op = input["op"].as_str().unwrap_or("unknown");
+                let cb = hex::decode(commitment_hex)?;
+                if cb.len() != 32 {
+                    anyhow::bail!("commitment must be 32 bytes hex");
+                }
+                let mut c = [0u8; 32];
+                c.copy_from_slice(&cb);
+                let anchor = AttestationAnchor::from_commitment(&c, op)?;
+                Ok(serde_json::to_value(anchor)?)
+            }
             "p2p_broadcast" => {
                 if let Some(ref p2p) = self.p2p {
                     let topic_str = input["topic"].as_str().unwrap_or("proof");
@@ -217,6 +252,7 @@ async fn run_http(state: AppState) -> Result<()> {
         .route("/logs", get(logs_page))
         .route("/p2p/status", get(p2p_status_handler))
         .route("/pq/status", get(pq_status_handler))
+        .route("/tee/status", get(tee_status_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -252,6 +288,13 @@ async fn health() -> impl IntoResponse {
 
 async fn pq_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.dispatch("pq_status", json!({})).await {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+    }
+}
+
+async fn tee_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.dispatch("tee_status", json!({})).await {
         Ok(v) => (StatusCode::OK, Json(v)),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
     }
@@ -503,10 +546,10 @@ section h2{color:#e6edf3;margin:1.5rem 0 .5rem;font-size:1.1rem;border-bottom:1p
     <h2>Build Phases</h2>
     <div class="card">
       <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 1-4 — Z3, egg, compute, pipeline, store, trace, HTTP2, Docker</span></div>
-      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 5 — RISC Zero ZK proof generation</span></div>
-      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 6 — libp2p P2P proof broadcast</span></div>
-      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 7 — Post-quantum keys (Kyber / Dilithium)</span></div>
-      <div class="phase-row"><span class="phase-icon phase-todo">&#9711;</span><span class="phase-label">Phase 8 — AWS Nitro TEE attestation anchor</span></div>
+      <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 5 — RISC Zero ZK proof generation</span></div>
+      <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 6 — libp2p P2P proof broadcast</span></div>
+      <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 7 — Post-quantum keys (ML-KEM-768 + ML-DSA-65)</span></div>
+      <div class="phase-row"><span class="phase-icon phase-done">&#10003;</span><span class="phase-label">Phase 8 — AWS Nitro TEE attestation anchor</span></div>
     </div>
   </section>
 

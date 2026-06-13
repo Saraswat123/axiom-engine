@@ -28,4 +28,5 @@ axiom-store = { path = "../store" }
 axiom-trace = { path = "../trace" }
 axiom-p2p = { path = "../p2p-transport" }
 axiom-pq = { path = "../pq-crypto" }
+axiom-nitro = { path = "../nitro-tee" }
 hex = "0.4.3"

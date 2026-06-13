@@ -447,6 +447,7 @@ dependencies = [
  "anyhow",
  "axiom-compute",
  "axiom-egg-tool",
+ "axiom-nitro",
  "axiom-p2p",
  "axiom-pipeline",
  "axiom-pq",
@@ -465,6 +466,17 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber 0.3.23",
+]
+
+[[package]]
+name = "axiom-nitro"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]

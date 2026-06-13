@@ -27,7 +27,7 @@ This matters most in high-stakes domains: protocol design, financial computation
 | No runtime invariants | Formal invariant registry — Z3 checks domain bounds on every call |
 | No multi-party trust | P2P proof broadcast + AggregatedProof composition (Phase 6) |
 | Classical crypto broken by quantum computers | ML-KEM-768 + ML-DSA-65 post-quantum identity (Phase 7) |
-| Confidential but auditable | AWS Nitro TEE attestation anchor (Phase 8) |
+| Proof commitment untied to execution environment | AWS Nitro TEE — PCR0 binds proof to specific binary (Phase 8) |
 
 The result: a computation engine where **trust is replaced by proof**.
 
@@ -377,6 +377,102 @@ crates/pq-crypto/
 
 ---
 
+## Phase 8 — AWS Nitro TEE Attestation Anchor
+
+AWS Nitro Enclaves issue COSE_Sign1 signed attestation documents that cryptographically bind a running program's code identity (PCR0 = EIF image hash) to any user data — in axiom-engine that user data is the ZK proof commitment. Third parties can verify the attestation doc against AWS's certificate chain without trusting the engine operator.
+
+### Why TEE + ZK
+
+| Without TEE | With Nitro TEE |
+|---|---|
+| Prove computation ran correctly | Prove computation ran in a specific, unmodified binary |
+| Verifier trusts the prover's machine | Verifier trusts AWS hardware attestation (PCR0 immutable) |
+| Proof commitment visible to operator | Computation hidden from operator until attestation released |
+
+ZK proves *what* was computed. TEE proves *where* it ran. Combined: a proof no one in the chain could fake.
+
+### PCR Values
+
+| Register | Content | Size |
+|---|---|---|
+| PCR0 | SHA-384 of enclave image (EIF) | 48 bytes |
+| PCR1 | SHA-384 of Linux kernel + ramdisk | 48 bytes |
+| PCR2 | SHA-384 of application binary | 48 bytes |
+
+Real Nitro uses SHA-384; dev/mock mode uses SHA-256 (deterministic per version).
+
+### Document Format
+
+Real Nitro: COSE_Sign1 CBOR signed by AWS certificate chain (root CA: AWS Nitro CA).
+Dev/mock: JSON document with SHA-256 commitment over (PCR0 ‖ PCR1 ‖ PCR2 ‖ user_data ‖ nonce ‖ timestamp).
+
+### Proof Flow
+
+```
+zk_prove(op, data)
+  → AggregatedProof { commitment: [u8;32] }
+  → SignedProof::sign(commitment, ML-DSA-65)       ← Phase 7
+  → AttestationAnchor::from_commitment(commitment) ← Phase 8
+  → TeeAttestation { pcrs, document_hash, nonce }
+  → zk_prove response includes tee_attestation field
+```
+
+### API
+
+```bash
+# TEE status — platform, enclave flag, algorithm info
+GET /tee/status
+# → {"enclave":false,"dev_mode":true,"platform":"macos (dev)",
+#    "nitro_feature_enabled":false,
+#    "pcr_algorithm":"SHA-384 (real Nitro) / SHA-256 mock (dev)",
+#    "document_format":"COSE_Sign1 CBOR (real Nitro) / JSON mock (dev)"}
+
+# Attest any 32-byte proof commitment
+POST /tools {"tool":"tee_attest","input":{"commitment":"<64 hex chars>","op":"sum"}}
+# → {"proof_commitment":"...","op":"sum",
+#    "attestation":{"dev_mode":true,"pcrs":{"pcr0":"...","pcr1":"...","pcr2":"..."},
+#    "document_hash":"...","nonce_hex":"...","timestamp":...}}
+
+# zk_prove now auto-attests — tee_attestation field in every response
+POST /tools {"tool":"zk_prove","input":{"op":"sum","data":[1,2,3]}}
+# → {...,"tee_attestation":{"dev_mode":true,"pcrs":{...},"document_hash":"..."}}
+```
+
+### Production Deployment
+
+```bash
+# 1. Build Enclave Image File (EIF)
+nitro-cli build-enclave \
+  --docker-uri axiom-engine:latest \
+  --output-file axiom-engine.eif
+
+# 2. Launch enclave (4 vCPUs, 8 GB RAM)
+nitro-cli run-enclave \
+  --eif-path axiom-engine.eif \
+  --cpu-count 4 --memory 8192 --debug-mode
+
+# 3. Feature flag — enables real NSM calls (Linux enclave only)
+cargo build --release -p axiom-mcp-server --features axiom-nitro/nitro
+
+# PCR0 of running enclave verifiable by any third party:
+nitro-cli describe-enclaves
+```
+
+### Crate
+
+```
+crates/nitro-tee/
+├── Cargo.toml   [features] nitro = []  (real NSM — Linux only)
+└── src/
+    └── lib.rs
+        ├── PcrValues         — PCR0/1/2 hashes
+        ├── TeeAttestation    — COSE_Sign1 (real) or SHA-256 mock
+        ├── AttestationAnchor — proof_commitment + op + attestation
+        └── TeeStatus         — JSON summary for /tee/status
+```
+
+---
+
 ## Build Phases
 
 | Phase | Status | Description |
@@ -388,7 +484,7 @@ crates/pq-crypto/
 | 5 | ✅ | RISC Zero ZK proof generation |
 | 6 | ✅ | libp2p P2P proof broadcast |
 | 7 | ✅ | Post-quantum keys (ML-KEM-768 + ML-DSA-65) |
-| 8 | 🔲 | AWS Nitro TEE attestation anchor |
+| 8 | ✅ | AWS Nitro TEE attestation anchor |
 
 ---
 
