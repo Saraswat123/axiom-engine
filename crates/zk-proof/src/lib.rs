@@ -124,6 +124,12 @@ mod risc0_impl {
 
 pub struct ZkProofTool;
 
+impl Default for ZkProofTool {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl ZkProofTool {
     pub fn new() -> Self {
         Self

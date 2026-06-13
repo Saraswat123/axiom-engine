@@ -132,7 +132,7 @@ impl AppState {
                 let sig = self.pq.sign(&msg);
                 Ok(json!({
                     "signature": hex::encode(&sig),
-                    "verifying_key": hex::encode(&self.pq.public_key_bytes()),
+                    "verifying_key": hex::encode(self.pq.public_key_bytes()),
                     "algorithm": "ML-DSA-65 (NIST FIPS 204)",
                     "sig_bytes": sig.len(),
                 }))

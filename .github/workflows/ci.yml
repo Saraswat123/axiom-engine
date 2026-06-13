@@ -29,8 +29,8 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install z3
-        run: sudo apt-get install -y libz3-dev
+      - name: Install z3 + clang
+        run: sudo apt-get install -y libz3-dev clang
 
       - name: Fmt check
         run: cargo fmt --all -- --check
@@ -62,8 +62,8 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install z3
-        run: sudo apt-get install -y libz3-dev
+      - name: Install z3 + clang
+        run: sudo apt-get install -y libz3-dev clang
 
       - name: Build release binary
         run: cargo build --release -p axiom-mcp-server
@@ -150,8 +150,8 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install z3
-        run: sudo apt-get install -y libz3-dev
+      - name: Install z3 + clang
+        run: sudo apt-get install -y libz3-dev clang
 
       - name: Build release binary
         run: cargo build --release -p axiom-mcp-server

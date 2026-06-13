@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 // ML-DSA
 use ml_dsa::{
     EncodedSignature, EncodedVerifyingKey, Generate, KeyInit as DsaKeyInit, Keypair, MlDsa65,
-    Signature, SignatureEncoding, Signer, SigningKey, Verifier, VerifyingKey,
+    Signature, Signer, SigningKey, Verifier, VerifyingKey,
 };
 
 // ML-KEM

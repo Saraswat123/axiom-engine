@@ -28,6 +28,12 @@ pub struct ExecutionTrace {
     pub entries: Vec<TraceEntry>,
 }
 
+impl Default for ExecutionTrace {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionTrace {
     pub fn new() -> Self {
         Self {
@@ -59,6 +65,12 @@ impl ExecutionTrace {
 #[derive(Clone)]
 pub struct TraceRecorder {
     inner: Arc<RwLock<ExecutionTrace>>,
+}
+
+impl Default for TraceRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TraceRecorder {

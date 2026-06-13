@@ -21,7 +21,9 @@ pub struct OptVerifyResult {
 }
 
 pub struct OptVerify {
+    #[allow(dead_code)]
     egg: EggTool,
+    #[allow(dead_code)]
     z3: Z3Tool,
     store: ArtifactStore,
     trace: TraceRecorder,

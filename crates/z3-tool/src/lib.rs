@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use z3::{ast::Int, Config, Context, SatResult, Solver};
 
+#[derive(Default)]
 pub struct Z3Tool {
     // Z3 Context is not Send — create per call
 }

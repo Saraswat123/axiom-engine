@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 /// Uses ark-ff BN254 scalar field (same field as Ethereum's BN254 precompile).
 pub mod field {
     use ark_bn254::Fr;
-    use ark_ff::{Field, PrimeField}; // BN254 scalar field — 254-bit prime
+    use ark_ff::PrimeField; // BN254 scalar field — 254-bit prime
 
     /// Encode a matrix row as a vector of field elements.
     /// Each f64 → nearest integer → Fr field element.
@@ -35,6 +35,12 @@ pub mod field {
 }
 
 pub struct ComputeTool;
+
+impl Default for ComputeTool {
+    fn default() -> Self {
+        Self
+    }
+}
 
 impl ComputeTool {
     pub fn new() -> Self {

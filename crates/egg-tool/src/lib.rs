@@ -4,6 +4,12 @@ use serde_json::{json, Value};
 
 pub struct EggTool;
 
+impl Default for EggTool {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl EggTool {
     pub fn new() -> Self {
         Self

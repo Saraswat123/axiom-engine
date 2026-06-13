@@ -35,6 +35,12 @@ pub struct ArtifactStore {
     l2: Arc<sled::Db>,
 }
 
+impl Default for ArtifactStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArtifactStore {
     /// Open persistent store at `path`. Creates directory if needed.
     pub fn open(path: &str) -> Result<Self> {
