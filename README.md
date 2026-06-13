@@ -1,6 +1,6 @@
 # axiom-engine
 
-> Proof-augmented AI agent engine in Rust. Every answer comes with mathematical proof of correctness, cryptographic execution integrity, and ZK-verifiable computation.
+> Proof-native AI agent engine in Rust. Every answer comes with mathematical proof of correctness, cryptographic execution integrity, and ZK-verifiable computation.
 
 [![CI](https://github.com/Saraswat123/axiom-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Saraswat123/axiom-engine/actions)
 
