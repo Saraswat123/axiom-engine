@@ -16,8 +16,8 @@ use axiom_compute::ComputeTool;
 use axiom_egg_tool::EggTool;
 use axiom_nitro::{AttestationAnchor, TeeStatus};
 use axiom_p2p::{MessageTopic, P2pHandle, P2pNode};
-use axiom_pq::{PqIdentity, PqKem, PqStatus, SignedProof};
 use axiom_pipeline::OptVerify;
+use axiom_pq::{PqIdentity, PqKem, PqStatus, SignedProof};
 use axiom_store::ArtifactStore;
 use axiom_trace::TraceRecorder;
 use axiom_z3_tool::Z3Tool;
@@ -62,8 +62,15 @@ impl AppState {
             "compute_matrix" => self.compute.run(input).await,
             "zk_prove" => {
                 let mut result = self.zk.generate_proof(input).await?;
-                let commitment_hex = result.get("commitment").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let op_str = result.get("op").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                let commitment_hex = result
+                    .get("commitment")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let op_str = result
+                    .get("op")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
                 // Broadcast proof commitment over P2P when available
                 if let Some(ref p2p) = self.p2p {
                     if let Some(ref ch) = commitment_hex {
@@ -99,9 +106,7 @@ impl AppState {
                 let result = ov.run(expr, None).await?;
                 Ok(serde_json::to_value(result)?)
             }
-            "store_stats" => {
-                Ok(serde_json::to_value(self.store.stats())?)
-            }
+            "store_stats" => Ok(serde_json::to_value(self.store.stats())?),
             "trace_snapshot" => {
                 let snap = self.trace.snapshot().await;
                 Ok(serde_json::to_value(snap)?)
@@ -115,13 +120,13 @@ impl AppState {
                         "topics": ["axiom/proof/v1","axiom/prove-req/v1","axiom/trace/v1","axiom/invariant/v1"],
                     }))
                 } else {
-                    Ok(json!({ "enabled": false, "hint": "set AXIOM_P2P_ENABLED=1 to start swarm" }))
+                    Ok(
+                        json!({ "enabled": false, "hint": "set AXIOM_P2P_ENABLED=1 to start swarm" }),
+                    )
                 }
             }
             // ── Post-quantum tools ────────────────────────────────────────────
-            "pq_status" => {
-                Ok(serde_json::to_value(PqStatus::from_identity(&self.pq))?)
-            }
+            "pq_status" => Ok(serde_json::to_value(PqStatus::from_identity(&self.pq))?),
             "pq_sign" => {
                 let msg = input["message"].as_str().unwrap_or("").as_bytes().to_vec();
                 let sig = self.pq.sign(&msg);
@@ -175,9 +180,7 @@ impl AppState {
                 }))
             }
             // ── TEE attestation tools ─────────────────────────────────────────
-            "tee_status" => {
-                Ok(serde_json::to_value(TeeStatus::current())?)
-            }
+            "tee_status" => Ok(serde_json::to_value(TeeStatus::current())?),
             "tee_attest" => {
                 let commitment_hex = input["commitment"].as_str().unwrap_or("");
                 let op = input["op"].as_str().unwrap_or("unknown");
@@ -201,7 +204,9 @@ impl AppState {
                         _ => MessageTopic::ProofArtifact,
                     };
                     p2p.publish(topic, payload).await?;
-                    Ok(json!({ "ok": true, "topic": topic_str, "bytes": input["payload"].as_str().unwrap_or("").len() }))
+                    Ok(
+                        json!({ "ok": true, "topic": topic_str, "bytes": input["payload"].as_str().unwrap_or("").len() }),
+                    )
                 } else {
                     anyhow::bail!("P2P not enabled — set AXIOM_P2P_ENABLED=1")
                 }
@@ -262,10 +267,7 @@ async fn run_http(state: AppState) -> Result<()> {
     Ok(())
 }
 
-async fn mcp_handler(
-    State(state): State<AppState>,
-    Json(req): Json<Value>,
-) -> impl IntoResponse {
+async fn mcp_handler(State(state): State<AppState>, Json(req): Json<Value>) -> impl IntoResponse {
     let resp = mcp::handle(&state, req).await;
     Json(resp)
 }
@@ -278,7 +280,10 @@ async fn tool_call_handler(
     let input = req["input"].clone();
     match state.dispatch(name, input).await {
         Ok(v) => (StatusCode::OK, Json(json!({ "ok": true, "result": v }))),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({ "ok": false, "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "ok": false, "error": e.to_string() })),
+        ),
     }
 }
 
@@ -289,26 +294,36 @@ async fn health() -> impl IntoResponse {
 async fn pq_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.dispatch("pq_status", json!({})).await {
         Ok(v) => (StatusCode::OK, Json(v)),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
     }
 }
 
 async fn tee_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.dispatch("tee_status", json!({})).await {
         Ok(v) => (StatusCode::OK, Json(v)),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
     }
 }
 
 async fn p2p_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.dispatch("p2p_status", json!({})).await {
         Ok(v) => (StatusCode::OK, Json(v)),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
     }
 }
 
 async fn logs_page() -> impl IntoResponse {
-    Html(r#"<!DOCTYPE html>
+    Html(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -401,7 +416,8 @@ setInterval(pollTrace, 2000);
 setInterval(pollStats, 3000);
 </script>
 </body>
-</html>"#)
+</html>"#,
+    )
 }
 
 async fn dashboard(_state: State<AppState>) -> impl IntoResponse {
@@ -647,7 +663,9 @@ async fn run_stdio(state: AppState) -> Result<()> {
     let mut lines = BufReader::new(stdin).lines();
 
     while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         match serde_json::from_str::<Value>(&line) {
             Ok(req) => {
                 let resp = mcp::handle(&state, req).await;

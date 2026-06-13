@@ -39,7 +39,10 @@ impl AggregatedProof {
                 data: b.serialize()?,
             });
         }
-        Ok(Self { components, aggregate_commitment: agg })
+        Ok(Self {
+            components,
+            aggregate_commitment: agg,
+        })
     }
 
     pub fn verify_all(&self) -> bool {
@@ -76,14 +79,17 @@ mod risc0_impl {
     }
 
     impl ProofBundle for RiscZeroProof {
-        fn proof_type(&self) -> &'static str { "risc-zero-v1" }
+        fn proof_type(&self) -> &'static str {
+            "risc-zero-v1"
+        }
 
         fn serialize(&self) -> Result<Vec<u8>> {
             Ok(serde_json::to_vec(&self.output)?)
         }
 
         fn verify(&self) -> Result<bool> {
-            self.receipt.verify(AXIOM_GUEST_ID)
+            self.receipt
+                .verify(AXIOM_GUEST_ID)
                 .map(|_| true)
                 .map_err(|e| anyhow::anyhow!("receipt verify failed: {}", e))
         }
@@ -97,11 +103,12 @@ mod risc0_impl {
     }
 
     pub fn prove(op: &str, data: Vec<f64>) -> Result<RiscZeroProof> {
-        let input = ComputeInput { op: op.to_string(), data };
+        let input = ComputeInput {
+            op: op.to_string(),
+            data,
+        };
 
-        let env = ExecutorEnv::builder()
-            .write(&input)?
-            .build()?;
+        let env = ExecutorEnv::builder().write(&input)?.build()?;
 
         // RISC0_DEV_MODE=1 → instant mock proof (dev/CI)
         // RISC0_DEV_MODE=0 → real STARK proof (~minutes locally, or use Bonsai)
@@ -118,7 +125,9 @@ mod risc0_impl {
 pub struct ZkProofTool;
 
 impl ZkProofTool {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub async fn generate_proof(&self, input: Value) -> Result<Value> {
         let op = input["op"].as_str().unwrap_or("sum");

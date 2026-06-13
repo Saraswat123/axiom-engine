@@ -103,8 +103,8 @@ impl TeeAttestation {
     // Calls aws-nitro-enclaves-nsm-api to obtain a COSE_Sign1 attestation doc.
     #[cfg(all(target_os = "linux", feature = "nitro"))]
     fn from_nsm(user_data: &[u8], nonce: &[u8]) -> Result<Self> {
-        use nsm_lib::{nsm_init, nsm_process_request};
         use nsm_api::api::{Request, Response};
+        use nsm_lib::{nsm_init, nsm_process_request};
 
         let ctx = nsm_init();
         let req = Request::Attestation {

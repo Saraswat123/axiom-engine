@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 
 // ML-DSA
 use ml_dsa::{
-    EncodedSignature, EncodedVerifyingKey, Generate, KeyInit as DsaKeyInit,
-    MlDsa65, Signature, SignatureEncoding, SigningKey, Signer, VerifyingKey, Verifier,
-    Keypair,
+    EncodedSignature, EncodedVerifyingKey, Generate, KeyInit as DsaKeyInit, Keypair, MlDsa65,
+    Signature, SignatureEncoding, Signer, SigningKey, Verifier, VerifyingKey,
 };
 
 // ML-KEM
@@ -29,14 +28,15 @@ pub struct PqIdentity {
 impl PqIdentity {
     /// Generate fresh keypair using OS randomness.
     pub fn generate() -> Self {
-        Self { signing_key: SigningKey::<MlDsa65>::generate() }
+        Self {
+            signing_key: SigningKey::<MlDsa65>::generate(),
+        }
     }
 
     /// Reconstruct from 32-byte seed exported by `seed_bytes()`.
     pub fn from_seed(seed_bytes: &[u8; 32]) -> Self {
         // KeyInit::new_from_slice accepts &[u8] and converts to Array<u8, U32> internally
-        let sk = DsaKeyInit::new_from_slice(seed_bytes)
-            .expect("seed must be exactly 32 bytes");
+        let sk = DsaKeyInit::new_from_slice(seed_bytes).expect("seed must be exactly 32 bytes");
         Self { signing_key: sk }
     }
 
@@ -65,7 +65,11 @@ impl PqIdentity {
     }
 
     /// Verify a signature. `verifying_key_bytes` comes from `public_key_bytes()`.
-    pub fn verify_signature(verifying_key_bytes: &[u8], msg: &[u8], sig_bytes: &[u8]) -> Result<bool> {
+    pub fn verify_signature(
+        verifying_key_bytes: &[u8],
+        msg: &[u8],
+        sig_bytes: &[u8],
+    ) -> Result<bool> {
         let vk_enc = EncodedVerifyingKey::<MlDsa65>::try_from(verifying_key_bytes)
             .map_err(|_| anyhow!("verifying key wrong length"))?;
         let vk = VerifyingKey::<MlDsa65>::decode(&vk_enc);
@@ -106,8 +110,8 @@ impl PqKem {
     /// Peer runs this with the encapsulation key you published.
     /// Returns `(ciphertext_to_send_back, shared_secret_32_bytes)`.
     pub fn encapsulate(ek_bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
-        let ek: EncapsulationKey<MlKem768> = TryKeyInit::new_from_slice(ek_bytes)
-            .map_err(|e| anyhow!("ML-KEM ek decode: {e:?}"))?;
+        let ek: EncapsulationKey<MlKem768> =
+            TryKeyInit::new_from_slice(ek_bytes).map_err(|e| anyhow!("ML-KEM ek decode: {e:?}"))?;
         let (ct, k) = ek.encapsulate();
         let ct_b: &[u8] = ct.as_ref();
         let k_b: &[u8] = k.as_ref();
@@ -116,7 +120,9 @@ impl PqKem {
 
     /// Holder of the decapsulation key recovers the shared secret from a ciphertext.
     pub fn decapsulate(&self, ct_bytes: &[u8]) -> Result<Vec<u8>> {
-        let k = self.dk.decapsulate_slice(ct_bytes)
+        let k = self
+            .dk
+            .decapsulate_slice(ct_bytes)
             .map_err(|e| anyhow!("ML-KEM decapsulate: {e:?}"))?;
         let b: &[u8] = k.as_ref();
         Ok(b.to_vec())

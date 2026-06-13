@@ -60,7 +60,9 @@ pub struct P2pHandle {
 
 impl P2pHandle {
     pub async fn publish(&self, topic: MessageTopic, data: Vec<u8>) -> Result<()> {
-        self.cmd_tx.send(P2pCommand::Publish { topic, data }).await?;
+        self.cmd_tx
+            .send(P2pCommand::Publish { topic, data })
+            .await?;
         Ok(())
     }
 
@@ -97,7 +99,10 @@ pub struct P2pNode {
 
 impl P2pNode {
     pub fn new(listen_addr: Multiaddr, bootstrap_peers: Vec<Multiaddr>) -> Self {
-        Self { listen_addr, bootstrap_peers }
+        Self {
+            listen_addr,
+            bootstrap_peers,
+        }
     }
 
     pub fn from_env() -> Self {
@@ -113,7 +118,10 @@ impl P2pNode {
             .filter_map(|s| s.trim().parse().ok())
             .collect();
 
-        Self { listen_addr, bootstrap_peers }
+        Self {
+            listen_addr,
+            bootstrap_peers,
+        }
     }
 
     pub fn start(self) -> Result<P2pHandle> {
@@ -178,7 +186,11 @@ impl P2pNode {
             "p2p swarm started"
         );
 
-        Ok(P2pHandle { cmd_tx, peer_count, local_peer_id })
+        Ok(P2pHandle {
+            cmd_tx,
+            peer_count,
+            local_peer_id,
+        })
     }
 }
 
@@ -197,11 +209,16 @@ fn handle_event(
             peer_count.fetch_add(1, Ordering::Relaxed);
             tracing::info!(%peer_id, peers = peer_count.load(Ordering::Relaxed), "peer connected");
             // Add to kademlia routing table
-            swarm.behaviour_mut().kademlia.add_address(&peer_id, "/ip4/0.0.0.0/tcp/0".parse().unwrap());
+            swarm
+                .behaviour_mut()
+                .kademlia
+                .add_address(&peer_id, "/ip4/0.0.0.0/tcp/0".parse().unwrap());
         }
         SwarmEvent::ConnectionClosed { peer_id, .. } => {
             let prev = peer_count.load(Ordering::Relaxed);
-            if prev > 0 { peer_count.fetch_sub(1, Ordering::Relaxed); }
+            if prev > 0 {
+                peer_count.fetch_sub(1, Ordering::Relaxed);
+            }
             tracing::info!(%peer_id, "peer disconnected");
         }
         SwarmEvent::Behaviour(AxiomBehaviourEvent::Gossipsub(gossipsub::Event::Message {
@@ -227,9 +244,10 @@ fn handle_event(
                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
             }
         }
-        SwarmEvent::Behaviour(AxiomBehaviourEvent::Kademlia(
-            kad::Event::RoutingUpdated { peer, .. },
-        )) => {
+        SwarmEvent::Behaviour(AxiomBehaviourEvent::Kademlia(kad::Event::RoutingUpdated {
+            peer,
+            ..
+        })) => {
             tracing::debug!(%peer, "kademlia routing updated");
         }
         _ => {}
@@ -289,7 +307,12 @@ fn build_swarm() -> Result<Swarm<AxiomBehaviour>> {
             // Ping — keepalive
             let ping = ping::Behaviour::new(ping::Config::new());
 
-            Ok(AxiomBehaviour { gossipsub, kademlia, identify, ping })
+            Ok(AxiomBehaviour {
+                gossipsub,
+                kademlia,
+                identify,
+                ping,
+            })
         })?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();

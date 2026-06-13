@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 /// Field element blob — F_p arithmetic aligned for ZK circuits.
 /// Uses ark-ff BN254 scalar field (same field as Ethereum's BN254 precompile).
 pub mod field {
-    use ark_ff::{Field, PrimeField};
-    use ark_bn254::Fr; // BN254 scalar field — 254-bit prime
+    use ark_bn254::Fr;
+    use ark_ff::{Field, PrimeField}; // BN254 scalar field — 254-bit prime
 
     /// Encode a matrix row as a vector of field elements.
     /// Each f64 → nearest integer → Fr field element.
@@ -24,7 +24,8 @@ pub mod field {
 
     /// Serialize field elements to bytes for store/ZK circuit input
     pub fn to_blob(elements: &[Fr]) -> Vec<u8> {
-        elements.iter()
+        elements
+            .iter()
             .flat_map(|e| {
                 use ark_ff::BigInteger;
                 e.into_bigint().to_bytes_le()
@@ -36,7 +37,9 @@ pub mod field {
 pub struct ComputeTool;
 
 impl ComputeTool {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub async fn run(&self, input: Value) -> Result<Value> {
         let op = input["op"].as_str().unwrap_or("determinant");
@@ -58,11 +61,9 @@ impl ComputeTool {
             // ZK-aligned: convert matrix to field element blob
             "field_blob" => {
                 let rows: Vec<Vec<ark_bn254::Fr>> = (0..n)
-                    .map(|i| field::matrix_row_to_field(&data[i*n..(i+1)*n]))
+                    .map(|i| field::matrix_row_to_field(&data[i * n..(i + 1) * n]))
                     .collect();
-                let blob: Vec<u8> = rows.iter()
-                    .flat_map(|r| field::to_blob(r))
-                    .collect();
+                let blob: Vec<u8> = rows.iter().flat_map(|r| field::to_blob(r)).collect();
                 json!({
                     "field": "BN254",
                     "blob_len": blob.len(),
@@ -77,7 +78,8 @@ impl ComputeTool {
 
     /// Parallel batch via rayon work-stealing — all CPU cores
     pub fn batch_determinants(&self, matrices: Vec<Vec<f64>>) -> Vec<f64> {
-        matrices.par_iter()
+        matrices
+            .par_iter()
             .map(|data| {
                 let n = (data.len() as f64).sqrt() as usize;
                 DMatrix::from_row_slice(n, n, data).determinant()
@@ -87,11 +89,14 @@ impl ComputeTool {
 
     /// Parallel field blob generation — for ZK circuit batch input
     pub fn batch_field_blobs(&self, matrices: Vec<Vec<f64>>) -> Vec<Vec<u8>> {
-        matrices.par_iter()
+        matrices
+            .par_iter()
             .map(|data| {
                 let n = (data.len() as f64).sqrt() as usize;
                 (0..n)
-                    .flat_map(|i| field::to_blob(&field::matrix_row_to_field(&data[i*n..(i+1)*n])))
+                    .flat_map(|i| {
+                        field::to_blob(&field::matrix_row_to_field(&data[i * n..(i + 1) * n]))
+                    })
                     .collect()
             })
             .collect()

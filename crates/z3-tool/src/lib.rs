@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde_json::{json, Value};
-use z3::{Config, Context, Solver, SatResult, ast::Int};
+use z3::{ast::Int, Config, Context, SatResult, Solver};
 
 pub struct Z3Tool {
     // Z3 Context is not Send — create per call
@@ -44,13 +44,22 @@ impl Z3Tool {
                 solver.assert(&x_sq.le(&zero));
             }
             _ => {
-                return ("unknown_property".to_string(), format!("property '{}' not implemented", property));
+                return (
+                    "unknown_property".to_string(),
+                    format!("property '{}' not implemented", property),
+                );
             }
         }
 
         match solver.check() {
-            SatResult::Unsat => ("proved".to_string(), "property holds for all values in range".to_string()),
-            SatResult::Sat => ("counterexample".to_string(), "property violated — model found".to_string()),
+            SatResult::Unsat => (
+                "proved".to_string(),
+                "property holds for all values in range".to_string(),
+            ),
+            SatResult::Sat => (
+                "counterexample".to_string(),
+                "property violated — model found".to_string(),
+            ),
             SatResult::Unknown => ("unknown".to_string(), "solver timed out".to_string()),
         }
     }

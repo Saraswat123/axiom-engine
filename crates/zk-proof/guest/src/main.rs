@@ -23,18 +23,23 @@ fn main() {
 
     // Compute inside zkVM — every instruction recorded in execution trace
     let result = match input.op.as_str() {
-        "sum"  => input.data.iter().sum(),
-        "dot"  => {
+        "sum" => input.data.iter().sum(),
+        "dot" => {
             let n = input.data.len() / 2;
-            input.data[..n].iter().zip(input.data[n..].iter())
-                .map(|(a, b)| a * b).sum()
+            input.data[..n]
+                .iter()
+                .zip(input.data[n..].iter())
+                .map(|(a, b)| a * b)
+                .sum()
         }
         "norm" => input.data.iter().map(|x| x * x).sum::<f64>().sqrt(),
-        _      => 0.0,
+        _ => 0.0,
     };
 
     // Hash of input (deterministic, for commitment)
-    let input_hash = input.data.iter()
+    let input_hash = input
+        .data
+        .iter()
         .fold(0u64, |acc, &x| acc.wrapping_add(x.to_bits()));
 
     // Commit public output to journal

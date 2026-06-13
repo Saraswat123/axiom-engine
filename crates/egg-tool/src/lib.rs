@@ -1,6 +1,6 @@
 use anyhow::Result;
+use egg::{rewrite, AstSize, Extractor, RecExpr, Rewrite, Runner, SymbolLang};
 use serde_json::{json, Value};
-use egg::{rewrite, Rewrite, Runner, RecExpr, SymbolLang, AstSize, Extractor};
 
 pub struct EggTool;
 
@@ -30,12 +30,11 @@ impl EggTool {
             rewrite!("mul-comm";  "(* ?x ?y)" => "(* ?y ?x)"),
         ];
 
-        let parsed: RecExpr<SymbolLang> = expr.parse()
+        let parsed: RecExpr<SymbolLang> = expr
+            .parse()
             .map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
 
-        let runner = Runner::default()
-            .with_expr(&parsed)
-            .run(&rules);
+        let runner = Runner::default().with_expr(&parsed).run(&rules);
 
         let extractor = Extractor::new(&runner.egraph, AstSize);
         let (_, best) = extractor.find_best(runner.roots[0]);

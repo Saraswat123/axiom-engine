@@ -51,8 +51,8 @@ impl ArtifactStore {
 
     /// In-memory only (tests / when no path configured)
     pub fn new() -> Self {
-        let path = std::env::var("AXIOM_STORE_PATH")
-            .unwrap_or_else(|_| "/tmp/axiom-store".to_string());
+        let path =
+            std::env::var("AXIOM_STORE_PATH").unwrap_or_else(|_| "/tmp/axiom-store".to_string());
         Self::open(&path).unwrap_or_else(|e| {
             tracing::warn!("sled open failed ({}), using memory-only store", e);
             Self {
@@ -138,12 +138,15 @@ impl ArtifactStore {
 
     pub fn store_field_blob(&self, label: &str, field_bytes: Bytes) -> String {
         let key = format!("blob:{}", label);
-        self.insert(key.clone(), Artifact {
-            id: key.clone(),
-            kind: ArtifactKind::BlobField,
-            data: field_bytes.to_vec(),
-            created_at: now_ms(),
-        });
+        self.insert(
+            key.clone(),
+            Artifact {
+                id: key.clone(),
+                kind: ArtifactKind::BlobField,
+                data: field_bytes.to_vec(),
+                created_at: now_ms(),
+            },
+        );
         key
     }
 
