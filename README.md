@@ -780,18 +780,3 @@ See [`testnet/spec.md`](testnet/spec.md) for:
 - Public testnet parameters
 - EIP-4844 blob DA for proof receipts
 
----
-
-## Target Companies
-
-This stack (Rust + ZK + Formal Verification + AI Agents) is the exact intersection hired for at:
-**Anthropic · RISC Zero · Succinct Labs · Trail of Bits · AWS Kani team · ArcadeAI · Cloudflare**
-
----
-
-## Contributors
-
-- [@Saraswat123](https://github.com/Saraswat123)
-- Claude Sonnet 4.6 (Anthropic) — AI pair programmer
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
