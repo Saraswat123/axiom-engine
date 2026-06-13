@@ -60,6 +60,76 @@ services:
       - axiom-net
     profiles: ["testnet", "full"]
 
+  # ── P2P cluster (3 nodes) — docker compose --profile cluster up ──────────
+
+  axiom-node1:
+    build: .
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+    environment:
+      - AXIOM_TRANSPORT=http
+      - PORT=8080
+      - AXIOM_P2P_ENABLED=1
+      - AXIOM_P2P_PORT=9000
+      - AXIOM_STORE_PATH=/data/axiom-store
+      - RUST_LOG=axiom=info,libp2p=warn
+    volumes:
+      - axiom-node1-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - axiom-net
+    profiles: ["cluster"]
+
+  axiom-node2:
+    build: .
+    ports:
+      - "8081:8080"
+      - "9001:9000"
+    environment:
+      - AXIOM_TRANSPORT=http
+      - PORT=8080
+      - AXIOM_P2P_ENABLED=1
+      - AXIOM_P2P_PORT=9000
+      - AXIOM_PEERS=/ip4/axiom-node1/tcp/9000
+      - AXIOM_STORE_PATH=/data/axiom-store
+      - RUST_LOG=axiom=info,libp2p=warn
+    volumes:
+      - axiom-node2-data:/data
+    depends_on:
+      axiom-node1:
+        condition: service_healthy
+    networks:
+      - axiom-net
+    profiles: ["cluster"]
+
+  axiom-node3:
+    build: .
+    ports:
+      - "8082:8080"
+      - "9002:9000"
+    environment:
+      - AXIOM_TRANSPORT=http
+      - PORT=8080
+      - AXIOM_P2P_ENABLED=1
+      - AXIOM_P2P_PORT=9000
+      - AXIOM_PEERS=/ip4/axiom-node1/tcp/9000
+      - AXIOM_STORE_PATH=/data/axiom-store
+      - RUST_LOG=axiom=info,libp2p=warn
+    volumes:
+      - axiom-node3-data:/data
+    depends_on:
+      axiom-node1:
+        condition: service_healthy
+    networks:
+      - axiom-net
+    profiles: ["cluster"]
+
   # Prometheus metrics
   prometheus:
     image: prom/prometheus:latest
@@ -87,6 +157,12 @@ services:
 
 volumes:
   axiom-data:
+    driver: local
+  axiom-node1-data:
+    driver: local
+  axiom-node2-data:
+    driver: local
+  axiom-node3-data:
     driver: local
 
 networks:
